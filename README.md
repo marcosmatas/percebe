@@ -2,6 +2,9 @@
 
 **Programa de Envío y Redirección de Correos Eliminando Basura Electrónica**
 
+![percebe](https://github.com/user-attachments/assets/9f703876-81f4-43c6-bb99-f7bbc0eeaac5)
+
+
 ## 📦 Estructura del Proyecto
 
 ### Archivos del Servidor (Linux/Ubuntu)
