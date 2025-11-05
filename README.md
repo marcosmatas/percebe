@@ -20,8 +20,7 @@
 
 1. **percebe_client.py** - Programa cliente con interfaz gráfica
 2. **compile.bat** - Script de compilación automática
-3. **generate_icon.py** - Generador de icono (opcional)
-4. **README_CLIENTE_WINDOWS.md** - Documentación del cliente
+3. **README_CLIENTE_WINDOWS.md** - Documentación del cliente
 
 ## 🚀 Instalación Rápida
 
