@@ -11,7 +11,7 @@
 - Instala P.E.R.C.E.B.E. server en un servidor linux.
 - Instala P.E.R.C.E.B.E. client en un equipo cliente (mac, linux o windows).
 - Desde el cliente de P.E.R.C.E.B.E. configura la cuenta nueva.
-- Ahora, desde el cliente de P.E.R.C.E.B.E. configura los reenvíos del correo a los destinatarios deseados. Ten en cuenta que el programa puede reenviar correos eliminando los archivos adjuntos para no saturar de adjuntos innecesarios las cuentas de los destinatarios.
+- Ahora, desde el cliente de P.E.R.C.E.B.E. configura los reenvíos del correo a los destinatarios deseados. Ten en cuenta que, si así lo deseas, el programa permite reenviar correos eliminando los archivos adjuntos para no saturar de adjuntos innecesarios las cuentas de los destinatarios.
 - Cada minuto P.E.R.C.E.B.E. comprobará si hay correo en la cuenta nueva.
   - Si hay correo y coincide con las reglas, reenvía el correo a los destinatarios configurados (incluyendo o no los adjuntos, según se haya configurado previamente) y luego lo elimina de la cuenta.
   - Si el correo no coincide con ninguna regla, elimina el correo de la cuenta.
