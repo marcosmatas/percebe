@@ -13,8 +13,8 @@
 - Desde el cliente, configura la cuenta nueva.
 - Ahora configura los reenvíos del correo a los destinatarios deseados. Ten en cuenta que el programa puede reenviar correos eliminando los archivos adjuntos para que pese menos.
 - Cada minuto P.E.R.C.E.B.E. comprobará si hay correo en la cuenta nueva.
-      - Si hay correo y coincide con las reglas, reenvía el correo a los destinatarios configurados (incluyendo o no los adjuntos, según se haya configurado previamente) y luego lo elimina de la cuenta.
-      - Si el correo no coincide con ninguna regla, elimina el correo de la cuenta.
+  - Si hay correo y coincide con las reglas, reenvía el correo a los destinatarios configurados (incluyendo o no los adjuntos, según se haya configurado previamente) y luego lo elimina de la cuenta.
+  - Si el correo no coincide con ninguna regla, elimina el correo de la cuenta.
 - Puedes configurar varias cuentas de correo y todos los reenvíos de correo que desees. 
 
 ## 📦 Estructura del Proyecto
