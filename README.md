@@ -4,6 +4,18 @@
 
 ![percebe](https://github.com/user-attachments/assets/9f703876-81f4-43c6-bb99-f7bbc0eeaac5)
 
+## Para qué sirve y cómo se usa este programa
+
+- Para usarlo, crea una cuenta de correo nueva. Ten en cuenta que este programa hará que esa cuenta de correo esté siempre vacía.
+- En la cuenta de correo desde la que quieres reenviar determinados correos, haz un reenvío de correo hacia la cuenta nueva.
+- Instala P.E.R.C.E.B.E. server en un servidor linux.
+- Instala P.E.R.C.E.B.E. client en un equipo cliente (mac, linux o windows).
+- Desde el cliente, configura la cuenta nueva.
+- Ahora configura los reenvíos del correo a los destinatarios deseados. Ten en cuenta que el programa puede reenviar correos eliminando los archivos adjuntos para que pese menos.
+- Cada minuto P.E.R.C.E.B.E. comprobará si hay correo en la cuenta nueva.
+      - Si hay correo y coincide con las reglas, reenvía el correo a los destinatarios configurados (incluyendo o no los adjuntos, según se haya configurado previamente) y luego lo elimina de la cuenta.
+      - Si el correo no coincide con ninguna regla, elimina el correo de la cuenta.
+- Puedes configurar varias cuentas de correo y todos los reenvíos de correo que desees. 
 
 ## 📦 Estructura del Proyecto
 
