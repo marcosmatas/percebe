@@ -7,7 +7,7 @@
 ## Para qué sirve y cómo se usa este programa
 
 - Para usarlo, crea una cuenta de correo nueva. Ten en cuenta que este programa hará que esa cuenta de correo esté siempre vacía.
-- En la cuenta de correo desde la que quieres reenviar determinados correos, haz un reenvío de correo hacia la cuenta nueva.
+- En el servidor de la cuenta de correo desde la que quieres reenviar determinados correos, haz un reenvío de TODO el correo hacia la cuenta nueva.
 - Instala P.E.R.C.E.B.E. server en un servidor linux.
 - Instala P.E.R.C.E.B.E. client en un equipo cliente (mac, linux o windows).
 - Desde el cliente, configura la cuenta nueva.
