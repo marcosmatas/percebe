@@ -1,0 +1,81 @@
+{
+    "cuentas": [
+        {
+            "nombre": "Cuenta Principal",
+            "activa": true,
+            "imap_server": "imap.gmail.com",
+            "imap_user": "tu_email@gmail.com",
+            "imap_password": "tu_contraseña_o_app_password",
+            "smtp_server": "smtp.gmail.com",
+            "smtp_port": 587,
+            "smtp_user": "tu_email@gmail.com",
+            "smtp_password": "tu_contraseña_o_app_password",
+            "reglas": [
+                {
+                    "nombre": "Reenvíos de Francia",
+                    "activa": true,
+                    "remitentes": [
+                        "contacto@empresa-francia.fr",
+                        "@dominio-francia.com"
+                    ],
+                    "palabras_clave": [
+                        "urgent",
+                        "importante"
+                    ],
+                    "destinatarios": [
+                        "destinatario1@example.com",
+                        "destinatario2@example.com"
+                    ],
+                    "incluir_adjuntos": false
+                },
+                {
+                    "nombre": "Facturas Proveedores",
+                    "activa": true,
+                    "remitentes": [
+                        "facturacion@proveedor.com"
+                    ],
+                    "palabras_clave": [
+                        "factura",
+                        "invoice"
+                    ],
+                    "destinatarios": [
+                        "contabilidad@miempresa.com"
+                    ],
+                    "incluir_adjuntos": true
+                }
+            ]
+        },
+        {
+            "nombre": "Cuenta Secundaria",
+            "activa": true,
+            "imap_server": "imap.example.com",
+            "imap_user": "otra_cuenta@example.com",
+            "imap_password": "otra_contraseña",
+            "smtp_server": "smtp.example.com",
+            "smtp_port": 587,
+            "smtp_user": "otra_cuenta@example.com",
+            "smtp_password": "otra_contraseña",
+            "reglas": [
+                {
+                    "nombre": "Alertas del Sistema",
+                    "activa": true,
+                    "remitentes": [
+                        "system@monitoring.com"
+                    ],
+                    "palabras_clave": [
+                        "alert",
+                        "warning",
+                        "critical"
+                    ],
+                    "destinatarios": [
+                        "admin@miempresa.com"
+                    ],
+                    "incluir_adjuntos": false
+                }
+            ]
+        }
+    ],
+    "intervalo_revision": 60,
+    "api_enabled": true,
+    "api_port": 5555
+}

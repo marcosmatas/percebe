@@ -1,0 +1,24 @@
+[Unit]
+Description=P.E.R.C.E.B.E. - Programa de Envío y Redirección de Correos
+After=network.target
+
+[Service]
+Type=simple
+User=percebe
+Group=percebe
+WorkingDirectory=/opt/percebe
+ExecStart=/opt/percebe/percebe_server
+Restart=always
+RestartSec=10
+
+# Seguridad
+PrivateTmp=yes
+NoNewPrivileges=true
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=percebe
+
+[Install]
+WantedBy=multi-user.target
