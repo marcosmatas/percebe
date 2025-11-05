@@ -19,8 +19,8 @@
 ### Archivos del Cliente (Windows)
 
 1. **percebe_client.py** - Programa cliente con interfaz gráfica
-2. **compile.bat** - Script de compilación automática
-3. **README_CLIENTE_WINDOWS.md** - Documentación del cliente
+2. **compilador.bat** - Script de compilación automática
+3. **percebe_client_readme.md** - Documentación del cliente
 
 ## 🚀 Instalación Rápida
 
