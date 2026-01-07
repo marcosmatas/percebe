@@ -2,6 +2,7 @@
 """
 P.E.R.C.E.B.E. - Programa de Envío y Redirección de Correos Eliminando Basura Electrónica
 Servidor principal para gestión automática de reenvío de correos
+Versión 2.0 - Optimizada anti-spam
 """
 
 import json
@@ -12,9 +13,12 @@ import email
 import socket
 import threading
 import time
+import random
+import string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.header import decode_header
+from email.utils import formatdate
 from datetime import datetime
 from pathlib import Path
 from email.mime.base import MIMEBase
@@ -22,6 +26,10 @@ from email import encoders
 
 
 class PercebeServer:
+    # Marca especial para detectar reenvíos (ΡCΒ: con espacio alt+255)
+    REENVIO_MARKER = "ΡCΒ: "  # Rho griega C y Beta griega + dos puntos + espacio alt+255
+    DELAY_ENTRE_ENVIOS = 3  # Segundos de espera entre envíos a distintos destinatarios
+    
     def __init__(self, config_dir="./percebe_config"):
         self.config_dir = Path(config_dir)
         self.config_file = self.config_dir / "config.json"
@@ -73,10 +81,10 @@ class PercebeServer:
             self.log_error(f"Error al guardar configuración: {e}")
             return False
     
-    def log_reenvio(self, asunto, regla_nombre):
+    def log_reenvio(self, asunto, regla_nombre, destinatario):
         """Registra un reenvío en el log"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"[{timestamp}] Asunto: {asunto} | Regla: {regla_nombre}\n"
+        log_entry = f"[{timestamp}] Asunto: {asunto} | Regla: {regla_nombre} | Destinatario: {destinatario}\n"
         
         try:
             with open(self.log_file, 'a', encoding='utf-8') as f:
@@ -133,6 +141,17 @@ class PercebeServer:
         
         return ''.join(result)
     
+    def is_autoforward_loop(self, subject):
+        """
+        Detecta si un correo es parte de un bucle de reenvío automático
+        comprobando si contiene la marcaΡCΒ: 
+        """
+        if self.REENVIO_MARKER in subject:
+            self.log_debug(f"Detectado bucle de reenvío: asunto contiene marca '{self.REENVIO_MARKER}'")
+            self.log_info(f"Correo descartado por bucle de reenvío: {subject}")
+            return True
+        return False
+    
     def check_rule_match(self, mail_data, regla):
         """Verifica si un correo coincide con una regla"""
         # Verificar remitente (si hay remitentes especificados)
@@ -174,17 +193,6 @@ class PercebeServer:
         
         self.log_debug(f"Regla '{regla.get('nombre')}': COINCIDE con el correo")
         return True
-    
-
-
-
-
-
-
-
-
-
-
 
     def get_email_body(self, msg):
         """Extrae el cuerpo del correo (texto plano, HTML y adjuntos)"""
@@ -245,33 +253,44 @@ class PercebeServer:
 
         return body_text, body_html, attachments
 
-
-
-
-
-
-
-
-    def forward_email(self, cuenta_config, mail_data, regla, include_attachments=False):
-        """Reenvía un correo según la regla especificada"""
+    def forward_email_single(self, cuenta_config, mail_data, regla, destinatario, include_attachments=False):
+        """
+        Reenvía un correo a UN SOLO destinatario
+        Versión 2.0 - Optimizada anti-spam con cabeceras críticas
+        """
         try:
-            # --- CORRECCIÓN INICIO ---
-            # El contenedor principal debe ser 'mixed' si queremos
-            # adjuntos Y cuerpos alternativos (texto/html).
             msg = MIMEMultipart('mixed') 
-            # --- CORRECCIÓN FIN ---
             
+            # ===== CABECERAS CRÍTICAS ANTI-SPAM =====
             msg['From'] = cuenta_config['smtp_user']
-            msg['To'] = ', '.join(regla['destinatarios'])
-            msg['Subject'] = f"FWD: {mail_data['subject']}"
+            msg['To'] = destinatario
             
-            # --- CORRECCIÓN INICIO ---
-            # Crear el contenedor 'alternative' para los cuerpos de texto/html
+            # 1. Message-ID (CRÍTICO - elimina ~4.29 puntos de spam)
+            domain = cuenta_config['smtp_user'].split('@')[-1]
+            random_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=20))
+            timestamp = int(time.time())
+            msg['Message-ID'] = f"<{random_id}.{timestamp}@{domain}>"
+            
+            # 2. Date (CRÍTICO - elimina ~1.36 puntos de spam)
+            msg['Date'] = formatdate(localtime=True)
+            
+            # 3. Asunto con marca de reenvío
+            msg['Subject'] = f"{self.REENVIO_MARKER}{mail_data['subject']}"
+            
+            # 4. Cabeceras adicionales recomendadas
+            msg['MIME-Version'] = '1.0'
+            msg['X-Mailer'] = 'P.E.R.C.E.B.E. v2.0'
+            
+            # 5. Cabeceras de procedencia (ayudan a la trazabilidad)
+            msg['X-Forwarded-From'] = mail_data['from']
+            msg['X-Original-Date'] = mail_data['date']
+            
+            # ===== CONSTRUCCIÓN DEL CUERPO (MEJORADA) =====
+            # Crear el contenedor 'alternative' para texto/HTML
             msg_alternative = MIMEMultipart('alternative')
-            # --- CORRECCIÓN FIN ---
             
-            # Agregar encabezado indicando el reenvío
-            header_info = f"\n\n--- Correo reenviado automáticamente por P.E.R.C.E.B.E. ---\n"
+            # Encabezado de reenvío (versión completa del nombre del programa)
+            header_info = f"\n\n--- Correo reenviado automáticamente por Programa de Envío y Redirección de Correo Eliminando Basura Electrónica ---\n"
             header_info += f"De: {mail_data['from']}\n"
             header_info += f"Asunto original: {mail_data['subject']}\n"
             header_info += f"Fecha: {mail_data['date']}\n"
@@ -279,53 +298,88 @@ class PercebeServer:
             
             # Agregar cuerpos al contenedor 'alternative'
             has_body = False
+            
             if mail_data['body_text']:
-                text_part = MIMEText(header_info + mail_data['body_text'], 'plain', 'utf-8')
+                # Normalizar saltos de línea (evita DOS_BODY_HIGH)
+                body_text_clean = mail_data['body_text'].replace('\r\n', '\n').replace('\r', '\n')
+                text_part = MIMEText(header_info + body_text_clean, 'plain', 'utf-8')
                 msg_alternative.attach(text_part)
                 has_body = True
             
             if mail_data['body_html']:
                 html_header = header_info.replace('\n', '<br>')
-                html_part = MIMEText(html_header + mail_data['body_html'], 'html', 'utf-8')
+                # Asegurar que el HTML esté bien formado
+                html_body = mail_data['body_html']
+                if not html_body.strip().startswith('<'):
+                    html_body = f"<html><body>{html_header}{html_body}</body></html>"
+                else:
+                    html_body = html_header + html_body
+                
+                html_part = MIMEText(html_body, 'html', 'utf-8')
                 msg_alternative.attach(html_part)
                 has_body = True
 
-            # Si no hay cuerpo, añadir al menos el header en texto plano
+            # Si no hay cuerpo, añadir al menos el header
             if not has_body:
-                 text_part = MIMEText(header_info, 'plain', 'utf-8')
-                 msg_alternative.attach(text_part)
+                text_part = MIMEText(header_info, 'plain', 'utf-8')
+                msg_alternative.attach(text_part)
 
-            # --- CORRECCIÓN INICIO ---
             # Adjuntar el contenedor 'alternative' al principal 'mixed'
             msg.attach(msg_alternative)
-            # --- CORRECCIÓN FIN ---
             
             # Si la regla especifica incluir adjuntos, adjuntarlos al 'mixed'
             if include_attachments and mail_data.get('attachments'):
-                self.log_debug(f"Adjuntando {len(mail_data['attachments'])} archivos al reenvío")
                 for attachment in mail_data['attachments']:
-                    msg.attach(attachment) # Esto ahora funciona porque 'msg' es 'mixed'
+                    msg.attach(attachment)
             
-            # Enviar correo
+            # ===== ENVÍO CON MANEJO MEJORADO =====
             with smtplib.SMTP(cuenta_config['smtp_server'], cuenta_config['smtp_port']) as server:
                 server.starttls()
                 server.login(cuenta_config['smtp_user'], cuenta_config['smtp_password'])
                 server.send_message(msg)
             
-            self.log_reenvio(mail_data['subject'], regla['nombre'])
+            self.log_reenvio(mail_data['subject'], regla['nombre'], destinatario)
             return True
             
         except Exception as e:
-            self.log_error(f"Error al reenviar correo: {e}")
+            self.log_error(f"Error al reenviar correo a {destinatario}: {e}")
             return False
 
-    
-
-
-
-
-
-
+    def forward_email(self, cuenta_config, mail_data, regla, include_attachments=False):
+        """
+        Reenvía un correo según la regla especificada
+        Envía a cada destinatario por separado con delay de 3 segundos entre cada uno
+        """
+        destinatarios = regla.get('destinatarios', [])
+        
+        if not destinatarios:
+            self.log_error(f"Regla '{regla['nombre']}' no tiene destinatarios configurados")
+            return False
+        
+        total_enviados = 0
+        total_errores = 0
+        
+        self.log_debug(f"Iniciando reenvío a {len(destinatarios)} destinatarios con delay de {self.DELAY_ENTRE_ENVIOS}s")
+        
+        for i, destinatario in enumerate(destinatarios):
+            self.log_debug(f"Enviando a destinatario {i+1}/{len(destinatarios)}: {destinatario}")
+            
+            if self.forward_email_single(cuenta_config, mail_data, regla, destinatario, include_attachments):
+                total_enviados += 1
+                self.log_info(f"Correo reenviado a {destinatario} - Regla '{regla['nombre']}'")
+            else:
+                total_errores += 1
+                self.log_error(f"Fallo al reenviar a {destinatario}")
+            
+            # Esperar entre envíos (excepto después del último)
+            if i < len(destinatarios) - 1:
+                self.log_debug(f"Esperando {self.DELAY_ENTRE_ENVIOS} segundos antes del siguiente envío...")
+                time.sleep(self.DELAY_ENTRE_ENVIOS)
+        
+        self.log_debug(f"Reenvío completado: {total_enviados} exitosos, {total_errores} errores")
+        
+        # Retornar True si al menos un envío fue exitoso
+        return total_enviados > 0
     
     def process_mailbox(self, cuenta_config):
         """Procesa una cuenta de correo"""
@@ -365,17 +419,26 @@ class PercebeServer:
                         'attachments': []
                     }
                     
-                    # Obtener cuerpo
-                    mail_data['body_text'], mail_data['body_html'], mail_data['attachments'] = self.get_email_body(msg)
-                    self.log_debug(f"Adjuntos detectados: {len(mail_data['attachments'])}")
-
                     # Log de procesamiento inicial
                     self.log_debug(f"--- PROCESANDO CORREO ---")
                     self.log_debug(f"De: {mail_data['from']}")
                     self.log_debug(f"Asunto: {mail_data['subject']}")
                     self.log_debug(f"Fecha: {mail_data['date']}")
                     
-                    # Verificar reglas - IMPORTANTE: No usar break, aplicar TODAS las que coincidan
+                    # COMPROBAR BUCLE DE REENVÍO ANTES DE CUALQUIER PROCESAMIENTO
+                    if self.is_autoforward_loop(mail_data['subject']):
+                        self.log_debug(f"Correo descartado por bucle de autorrespuesta")
+                        # Eliminar correo del servidor
+                        mail.store(mail_id, '+FLAGS', '\\Deleted')
+                        self.log_debug(f"Correo marcado para eliminación")
+                        self.log_debug(f"--- FIN PROCESAMIENTO ---\n")
+                        continue  # Pasar al siguiente correo
+                    
+                    # Obtener cuerpo (solo si no es bucle)
+                    mail_data['body_text'], mail_data['body_html'], mail_data['attachments'] = self.get_email_body(msg)
+                    self.log_debug(f"Adjuntos detectados: {len(mail_data['attachments'])}")
+                    
+                    # Verificar reglas - Aplicar TODAS las que coincidan
                     reglas_activas = [r for r in cuenta_config.get('reglas', []) if r.get('activa', True)]
                     
                     self.log_debug(f"Evaluando {len(reglas_activas)} reglas activas")
@@ -543,7 +606,7 @@ class PercebeServer:
     def start(self):
         """Inicia el servidor P.E.R.C.E.B.E."""
         self.running = True
-        self.log_info("P.E.R.C.E.B.E. iniciado")
+        self.log_info("P.E.R.C.E.B.E. v2.0 iniciado")
         
         # Iniciar servidor API en hilo separado
         if self.config.get('api_enabled', True):
