@@ -2,7 +2,7 @@
 """
 P.E.R.C.E.B.E. - Programa de Envío y Redirección de Correos Eliminando Basura Electrónica
 Servidor principal para gestión automática de reenvío de correos
-Versión 2.0 - Optimizada anti-spam
+Versión 2.1 - Con sistema de reintentos y cola persistente
 """
 
 import json
@@ -30,21 +30,29 @@ class PercebeServer:
     REENVIO_MARKER = "ΡCΒ: "  # Rho griega C y Beta griega + dos puntos + espacio alt+255
     DELAY_ENTRE_ENVIOS = 3  # Segundos de espera entre envíos a distintos destinatarios
     
+    # Configuración de reintentos
+    MAX_REINTENTOS = 50  # Máximo número de reintentos por correo
+    REINTENTO_BASE_DELAY = 60  # Segundos base para el primer reintento (1 min)
+    REINTENTO_MAX_DELAY = 3600  # Máximo delay entre reintentos (1 hora)
+    
     def __init__(self, config_dir="./percebe_config"):
         self.config_dir = Path(config_dir)
         self.config_file = self.config_dir / "config.json"
         self.log_file = self.config_dir / "reenvios.log"
         self.error_log_file = self.config_dir / "errores.log"
         self.debug_log_file = self.config_dir / "procesamiento.log"
+        self.retry_queue_file = self.config_dir / "cola_reintentos.json"
         self.config = {}
         self.running = False
         self.api_port = 5555
+        self.retry_queue = []
         
         # Crear directorio de configuración si no existe
         self.config_dir.mkdir(parents=True, exist_ok=True)
         
         # Cargar o crear configuración
         self.load_config()
+        self.load_retry_queue()
     
     def load_config(self):
         """Carga la configuración desde el archivo JSON o crea uno vacío"""
@@ -80,6 +88,107 @@ class PercebeServer:
         except Exception as e:
             self.log_error(f"Error al guardar configuración: {e}")
             return False
+    
+    def load_retry_queue(self):
+        """Carga la cola de reintentos desde el archivo JSON"""
+        if self.retry_queue_file.exists():
+            try:
+                with open(self.retry_queue_file, 'r', encoding='utf-8') as f:
+                    self.retry_queue = json.load(f)
+                if self.retry_queue:
+                    self.log_info(f"Cola de reintentos cargada: {len(self.retry_queue)} correos pendientes")
+            except Exception as e:
+                self.log_error(f"Error al cargar cola de reintentos: {e}")
+                self.retry_queue = []
+        else:
+            self.retry_queue = []
+    
+    def save_retry_queue(self):
+        """Guarda la cola de reintentos en el archivo JSON"""
+        try:
+            with open(self.retry_queue_file, 'w', encoding='utf-8') as f:
+                json.dump(self.retry_queue, indent=4, fp=f, ensure_ascii=False)
+            return True
+        except Exception as e:
+            self.log_error(f"Error al guardar cola de reintentos: {e}")
+            return False
+    
+    def add_to_retry_queue(self, cuenta_config, mail_data, regla, destinatario, include_attachments=False):
+        """Añade un correo a la cola de reintentos"""
+        retry_item = {
+            'cuenta_config': cuenta_config,
+            'mail_data': mail_data,
+            'regla': regla,
+            'destinatario': destinatario,
+            'include_attachments': include_attachments,
+            'intentos': 0,
+            'proximo_intento': time.time() + self.REINTENTO_BASE_DELAY,
+            'timestamp_creacion': datetime.now().isoformat()
+        }
+        
+        self.retry_queue.append(retry_item)
+        self.save_retry_queue()
+        self.log_info(f"Correo añadido a cola de reintentos: {mail_data['subject']} -> {destinatario}")
+    
+    def process_retry_queue(self):
+        """Procesa la cola de reintentos"""
+        if not self.retry_queue:
+            return
+        
+        self.log_debug(f"Procesando cola de reintentos: {len(self.retry_queue)} items")
+        
+        now = time.time()
+        items_to_remove = []
+        items_to_update = []
+        
+        for i, item in enumerate(self.retry_queue):
+            # Verificar si es momento de reintentar
+            if item['proximo_intento'] > now:
+                continue
+            
+            self.log_debug(f"Reintentando envío (intento {item['intentos'] + 1}/{self.MAX_REINTENTOS}): {item['mail_data']['subject']} -> {item['destinatario']}")
+            
+            # Intentar reenviar
+            success = self.forward_email_single(
+                item['cuenta_config'],
+                item['mail_data'],
+                item['regla'],
+                item['destinatario'],
+                item['include_attachments']
+            )
+            
+            if success:
+                # Éxito: marcar para eliminar de la cola
+                items_to_remove.append(i)
+                self.log_info(f"Reintento exitoso: {item['mail_data']['subject']} -> {item['destinatario']}")
+            else:
+                # Fallo: incrementar contador de intentos
+                item['intentos'] += 1
+                
+                if item['intentos'] >= self.MAX_REINTENTOS:
+                    # Máximo de reintentos alcanzado: eliminar y registrar error
+                    items_to_remove.append(i)
+                    self.log_error(f"Máximo de reintentos alcanzado para: {item['mail_data']['subject']} -> {item['destinatario']}")
+                else:
+                    # Calcular próximo intento con backoff exponencial
+                    delay = min(
+                        self.REINTENTO_BASE_DELAY * (2 ** item['intentos']),
+                        self.REINTENTO_MAX_DELAY
+                    )
+                    item['proximo_intento'] = now + delay
+                    items_to_update.append(i)
+                    
+                    proximo_str = datetime.fromtimestamp(item['proximo_intento']).strftime("%H:%M:%S")
+                    self.log_info(f"Reintento fallido. Próximo intento a las {proximo_str} (delay: {delay}s)")
+        
+        # Eliminar items completados o que excedieron reintentos
+        for i in sorted(items_to_remove, reverse=True):
+            del self.retry_queue[i]
+        
+        # Guardar cola actualizada si hubo cambios
+        if items_to_remove or items_to_update:
+            self.save_retry_queue()
+            self.log_debug(f"Cola de reintentos actualizada: {len(self.retry_queue)} items restantes")
     
     def log_reenvio(self, asunto, regla_nombre, destinatario):
         """Registra un reenvío en el log"""
@@ -256,7 +365,7 @@ class PercebeServer:
     def forward_email_single(self, cuenta_config, mail_data, regla, destinatario, include_attachments=False):
         """
         Reenvía un correo a UN SOLO destinatario
-        Versión 2.0 - Optimizada anti-spam con cabeceras críticas
+        Versión 2.1 - Con manejo de errores de conexión
         """
         try:
             msg = MIMEMultipart('mixed') 
@@ -279,7 +388,7 @@ class PercebeServer:
             
             # 4. Cabeceras adicionales recomendadas
             msg['MIME-Version'] = '1.0'
-            msg['X-Mailer'] = 'P.E.R.C.E.B.E. v2.0'
+            msg['X-Mailer'] = 'P.E.R.C.E.B.E. v2.1'
             
             # 5. Cabeceras de procedencia (ayudan a la trazabilidad)
             msg['X-Forwarded-From'] = mail_data['from']
@@ -333,7 +442,7 @@ class PercebeServer:
                     msg.attach(attachment)
             
             # ===== ENVÍO CON MANEJO MEJORADO =====
-            with smtplib.SMTP(cuenta_config['smtp_server'], cuenta_config['smtp_port']) as server:
+            with smtplib.SMTP(cuenta_config['smtp_server'], cuenta_config['smtp_port'], timeout=30) as server:
                 server.starttls()
                 server.login(cuenta_config['smtp_user'], cuenta_config['smtp_password'])
                 server.send_message(msg)
@@ -341,7 +450,12 @@ class PercebeServer:
             self.log_reenvio(mail_data['subject'], regla['nombre'], destinatario)
             return True
             
+        except (smtplib.SMTPException, socket.error, OSError, TimeoutError) as e:
+            # Errores de red/conexión: estos justifican reintento
+            self.log_error(f"Error de conexión al reenviar correo a {destinatario}: {e}")
+            return False
         except Exception as e:
+            # Otros errores: registrar pero no reintentar
             self.log_error(f"Error al reenviar correo a {destinatario}: {e}")
             return False
 
@@ -349,6 +463,7 @@ class PercebeServer:
         """
         Reenvía un correo según la regla especificada
         Envía a cada destinatario por separado con delay de 3 segundos entre cada uno
+        Versión 2.1 - Añade a cola de reintentos si falla
         """
         destinatarios = regla.get('destinatarios', [])
         
@@ -369,7 +484,9 @@ class PercebeServer:
                 self.log_info(f"Correo reenviado a {destinatario} - Regla '{regla['nombre']}'")
             else:
                 total_errores += 1
-                self.log_error(f"Fallo al reenviar a {destinatario}")
+                self.log_error(f"Fallo al reenviar a {destinatario}, añadiendo a cola de reintentos")
+                # Añadir a cola de reintentos
+                self.add_to_retry_queue(cuenta_config, mail_data, regla, destinatario, include_attachments)
             
             # Esperar entre envíos (excepto después del último)
             if i < len(destinatarios) - 1:
@@ -486,6 +603,10 @@ class PercebeServer:
         """Ejecuta un ciclo de revisión de todas las cuentas"""
         self.log_info("Iniciando ciclo de revisión de correos")
         
+        # Primero procesar la cola de reintentos
+        self.process_retry_queue()
+        
+        # Luego revisar nuevos correos
         for cuenta in self.config.get('cuentas', []):
             if cuenta.get('activa', True):
                 self.log_info(f"Revisando cuenta: {cuenta.get('nombre', 'sin nombre')}")
@@ -552,6 +673,19 @@ class PercebeServer:
                     else:
                         response = {'status': 'ok', 'data': []}
                 
+                elif command == 'get_retry_queue':
+                    # Nuevo comando para ver la cola de reintentos
+                    queue_info = []
+                    for item in self.retry_queue:
+                        queue_info.append({
+                            'asunto': item['mail_data']['subject'],
+                            'destinatario': item['destinatario'],
+                            'intentos': item['intentos'],
+                            'proximo_intento': datetime.fromtimestamp(item['proximo_intento']).isoformat(),
+                            'timestamp_creacion': item['timestamp_creacion']
+                        })
+                    response = {'status': 'ok', 'data': queue_info}
+                
                 elif command == 'test_connection':
                     cuenta_id = data.get('cuenta_id')
                     if cuenta_id is not None and cuenta_id < len(self.config.get('cuentas', [])):
@@ -606,7 +740,7 @@ class PercebeServer:
     def start(self):
         """Inicia el servidor P.E.R.C.E.B.E."""
         self.running = True
-        self.log_info("P.E.R.C.E.B.E. v2.0 iniciado")
+        self.log_info("P.E.R.C.E.B.E. v2.1 iniciado")
         
         # Iniciar servidor API en hilo separado
         if self.config.get('api_enabled', True):
