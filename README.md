@@ -38,44 +38,18 @@
 
 ### En el Servidor (Ubuntu Linux)
 
+Para instalar
 ```bash
-# 1. Compilar el servidor
-pip install pyinstaller
-pyinstaller --onefile --name percebe_server percebe_server.py
-
-# 2. Instalar como servicio
-chmod +x install.sh
-sudo ./install.sh
-
-# 3. Configurar primera cuenta (opcional, también desde Windows)
-sudo python3 config_tool.py /opt/percebe/percebe_config/config.json
-
-# 4. Iniciar servicio
-sudo systemctl start percebe
-sudo systemctl enable percebe  # Inicio automático
-
-# 5. Ver logs
-sudo journalctl -u percebe -f
+curl -s https://programas.flopy.es/percebe/percebe.sh | sudo bash
 ```
 
+Para desinstalar
+```bash
+curl -s https://programas.flopy.es/percebe/adiospercebe.sh | sudo bash
+```
 ### En el Cliente (Windows)
 
-```bash
-# 1. Instalar dependencias
-pip install PyQt5
-
-# 2. Compilar (usar compile.bat o manual)
-compile.bat
-
-# O manualmente:
-pip install pyinstaller
-pyinstaller --onefile --windowed --name "PERCEBE" percebe_client.py
-
-# 3. El ejecutable estará en: dist\PERCEBE.exe
-
-# 4. Copiar a ubicación permanente y crear acceso directo en Inicio
-# Win+R → shell:startup → Crear acceso directo
-```
+Copiar el ejecutable en la carpeta deseada y ejecutarlo
 
 ## 🎯 Flujo de Trabajo
 
@@ -98,6 +72,9 @@ El sistema funciona automáticamente:
 - Aplica las reglas definidas
 - Reenvía los correos que coincidan
 - Elimina todos los correos procesados
+- Si alguien tiene una respuesta de vacaciones en el correo, la detecta y no procesa esa respuesta
+- Los correos los envía de uno en uno aunque haya distintos destinatarios para evitar caer en spam
+- Si se va la luz, internet o se apaga el servidor durante el envío de mensajes, al iniciar el servidor de nuevo se reintenta el envío durante 24 horas
 - Registra todo en los logs
 
 Solo necesitas el cliente Windows para:
