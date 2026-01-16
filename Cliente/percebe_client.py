@@ -19,6 +19,14 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QPainter, QColor
 
+class NoWheelSpinBox(QSpinBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+    
+    def wheelEvent(self, event):
+        # Ignorar el evento de la rueda del ratón
+        event.ignore()
+
 
 class PercebeClient:
     """Clase para manejar la comunicación con el servidor"""
@@ -162,7 +170,14 @@ class MainWindow(QMainWindow):
         header_layout.addLayout(title_layout)
         header_layout.addStretch()
         
-        # Botón Percebeiro Pro
+        # --- NUEVO BOTÓN: INVÍTAME A UN CAFÉ ---
+        btn_coffee = QPushButton("☕ Si te gusta invítame a un café")
+        btn_coffee.setFixedHeight(40)
+        btn_coffee.setCursor(Qt.PointingHandCursor)
+        btn_coffee.clicked.connect(lambda: webbrowser.open("https://buymeacoffee.com/flopy"))
+        header_layout.addWidget(btn_coffee)
+        
+        # Botón Percebeiro Pro (Existente)
         btn_pro = QPushButton("🎵 Modo Percebeiro Pro")
         btn_pro.setFixedHeight(40)
         btn_pro.setCursor(Qt.PointingHandCursor)
@@ -186,9 +201,10 @@ class MainWindow(QMainWindow):
         
         conn_layout.addWidget(QLabel("Puerto:"))
         
-        self.port_input = QSpinBox()
+        self.port_input = NoWheelSpinBox()
         self.port_input.setRange(1, 65535)
         self.port_input.setValue(self.client_config.get('server_port', 5555))
+        self.port_input.setButtonSymbols(QSpinBox.NoButtons)
         self.port_input.setMaximumWidth(80)
         conn_layout.addWidget(self.port_input)
         
@@ -287,9 +303,10 @@ class MainWindow(QMainWindow):
         self.smtp_server_input.setPlaceholderText("smtp.gmail.com")
         smtp_layout.addRow("Servidor SMTP:", self.smtp_server_input)
         
-        self.smtp_port_input = QSpinBox()
+        self.smtp_port_input = NoWheelSpinBox()
         self.smtp_port_input.setRange(1, 65535)
         self.smtp_port_input.setValue(587)
+        self.smtp_port_input.setButtonSymbols(QSpinBox.NoButtons)
         smtp_layout.addRow("Puerto SMTP:", self.smtp_port_input)
         
         self.smtp_user_input = QLineEdit()
@@ -981,15 +998,40 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(style)
 
 
+#def main():
+#    """Función principal"""
+#    app = QApplication(sys.argv)
+#    app.setQuitOnLastWindowClosed(False)  # No cerrar al ocultar la ventana
+#    
+#    window = MainWindow()
+#    window.show()
+#    
+#    sys.exit(app.exec_())
+
 def main():
     """Función principal"""
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)  # No cerrar al ocultar la ventana
+
+    # --- EVITAR SEGUNDA INSTANCIA ---
+    # Intentamos crear un socket en un puerto específico (ej. 45678)
+    # Si falla, es que el programa ya está abierto.
+    try:
+        lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        lock_socket.bind(('127.0.0.1', 45678)) 
+    except socket.error:
+        # No mostramos ventana, solo un aviso y cerramos
+        print("El programa ya se está ejecutando.")
+        sys.exit(0)
+    # --------------------------------
+    
+    app.setQuitOnLastWindowClosed(False)
     
     window = MainWindow()
     window.show()
     
-    sys.exit(app.exec_())
+    # Mantener el socket vivo mientras dure la app
+    result = app.exec_()
+    sys.exit(result)
 
 
 if __name__ == "__main__":
